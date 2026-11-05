@@ -205,23 +205,28 @@ function GameContent() {
         {/* Slot selection */}
         {(phase === 'choose' || phase === 'name') && (
           <div className="bg-white rounded-2xl shadow p-6 mb-4">
-            <div className={`grid gap-3`} style={{ gridTemplateColumns: `repeat(${Math.min(n, 5)}, 1fr)` }}>
+            <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${n <= 10 ? Math.min(n, 5) : n <= 20 ? 5 : 10}, 1fr)` }}>
               {Array.from({ length: n }, (_, i) => {
                 const claimed = isClaimed(i)
                 const claimName = getClaimName(i)
+                const compact = n > 20
                 return (
                   <button key={i}
                     onClick={() => handleSelectSlot(i)}
                     disabled={claimed}
-                    className={`flex flex-col items-center rounded-xl py-3 px-2 border-2 transition font-bold text-sm
+                    className={`flex flex-col items-center rounded-xl border-2 transition font-bold
+                      ${compact ? 'py-2 px-1 text-xs' : 'py-3 px-2 text-sm'}
                       ${claimed ? 'border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed' :
                         selectedSlot === i && phase === 'name' ? 'border-red-500 bg-red-50 text-red-600' :
                         'border-gray-200 bg-white text-gray-700 hover:border-red-300 hover:bg-red-50'}`}>
-                    <span className="text-xl font-black">{i + 1}</span>
-                    {claimed && claimName ? (
+                    <span className={`font-black ${compact ? 'text-sm' : 'text-xl'}`}>{i + 1}</span>
+                    {!compact && (claimed && claimName ? (
                       <span className="text-xs text-gray-400 mt-1 truncate w-full text-center">{claimName}</span>
                     ) : (
                       <span className="text-xs text-gray-300 mt-1">{autoNames[i].split(' ')[1]}</span>
+                    ))}
+                    {compact && claimed && claimName && (
+                      <span className="text-xs text-gray-400 truncate w-full text-center leading-tight">{claimName.slice(0, 4)}</span>
                     )}
                   </button>
                 )

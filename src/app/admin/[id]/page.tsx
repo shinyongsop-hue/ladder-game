@@ -90,18 +90,21 @@ function AdminContent() {
         {/* Participant slots */}
         <div className="bg-white rounded-2xl shadow p-6">
           <h2 className="font-bold text-gray-700 mb-4">참여 현황</h2>
-          <div className="space-y-3">
+          <div className={n > 20 ? 'grid grid-cols-2 gap-2' : 'space-y-3'}>
             {Array.from({ length: n }, (_, i) => {
               const claim = getClaimForSlot(i)
               const isClaimed = !!claim
               const result = results[i]
               const isWon = result !== '꽝'
+              const compact = n > 20
 
               return (
-                <div key={i} className={`flex items-center gap-3 p-3 rounded-xl border-2 transition
+                <div key={i} className={`flex items-center gap-2 rounded-xl border-2 transition
+                  ${compact ? 'p-2' : 'p-3'}
                   ${isClaimed ? 'border-gray-200 bg-gray-50' : 'border-dashed border-gray-200 bg-white'}`}>
                   {/* Slot number */}
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm flex-shrink-0
+                  <div className={`rounded-full flex items-center justify-center font-black flex-shrink-0
+                    ${compact ? 'w-7 h-7 text-xs' : 'w-10 h-10 text-sm'}
                     ${isClaimed ? 'bg-gray-200 text-gray-600' : 'bg-red-100 text-red-500'}`}>
                     {i + 1}
                   </div>
@@ -110,25 +113,26 @@ function AdminContent() {
                   <div className="flex-1 min-w-0">
                     {isClaimed ? (
                       <>
-                        <p className="font-bold text-gray-800 truncate">{claim!.real_name}</p>
-                        <p className="text-xs text-gray-400 truncate">{autoNames[i]}</p>
+                        <p className={`font-bold text-gray-800 truncate ${compact ? 'text-xs' : ''}`}>{claim!.real_name}</p>
+                        {!compact && <p className="text-xs text-gray-400 truncate">{autoNames[i]}</p>}
                       </>
                     ) : (
                       <>
-                        <p className="text-gray-400 text-sm">미참여</p>
-                        <p className="text-xs text-gray-300">{autoNames[i]}</p>
+                        <p className={`text-gray-400 ${compact ? 'text-xs' : 'text-sm'}`}>미참여</p>
+                        {!compact && <p className="text-xs text-gray-300">{autoNames[i]}</p>}
                       </>
                     )}
                   </div>
 
                   {/* Result badge */}
                   {isClaimed && (
-                    <div className={`px-3 py-1 rounded-full text-sm font-bold flex-shrink-0
+                    <div className={`rounded-full font-bold flex-shrink-0 text-center
+                      ${compact ? 'px-1.5 py-0.5 text-xs' : 'px-3 py-1 text-sm'}
                       ${isWon ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-400'}`}>
                       {result}
                     </div>
                   )}
-                  {!isClaimed && (
+                  {!isClaimed && !compact && (
                     <div className="px-3 py-1 rounded-full text-xs text-gray-300 border border-dashed border-gray-200">
                       대기 중
                     </div>

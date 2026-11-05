@@ -8,23 +8,22 @@ export default function Home() {
   const router = useRouter()
   const [title, setTitle] = useState('')
   const [n, setN] = useState(4)
-  const [prizes, setPrizes] = useState<string[]>(['당첨!', '', '', ''])
+  const [prizes, setPrizes] = useState<string[]>(['당첨!'])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const handleN = (val: number) => {
-    setN(val)
-    setPrizes(prev => {
-      const next = [...prev]
-      while (next.length < val) next.push('')
-      return next.slice(0, val)
-    })
+  const addPrize = () => {
+    if (prizes.length < n) setPrizes(p => [...p, ''])
+  }
+  const removePrize = (i: number) => {
+    setPrizes(p => p.filter((_, idx) => idx !== i))
   }
 
   const handleCreate = async () => {
     if (!title.trim()) { setError('제목을 입력해주세요'); return }
-    const wonCount = prizes.filter(p => p.trim()).length
-    if (wonCount === 0) { setError('당첨 항목을 하나 이상 입력해주세요'); return }
+    const prizeList = prizes.map(p => p.trim()).filter(Boolean)
+    if (prizeList.length === 0) { setError('당첨 항목을 하나 이상 입력해주세요'); return }
+    if (prizeList.length > n) { setError('당첨 항목이 참여 인원보다 많을 수 없습니다'); return }
     setLoading(true)
     setError('')
 
@@ -34,14 +33,8 @@ export default function Home() {
     const { rungs, rows } = generateLadder(n, seed)
     const resultIndices = computeResults(n, rungs, rows)
 
-    // Build results array: assign prizes to slots, rest are '꽝'
-    const prizeList = prizes.filter(p => p.trim())
     const resultSlots = Array(n).fill('꽝')
-    // Distribute prizes by result index
-    prizeList.forEach((prize, i) => {
-      if (i < n) resultSlots[i] = prize
-    })
-    // Map: start position i → result
+    prizeList.forEach((prize, i) => { resultSlots[i] = prize })
     const results = resultIndices.map(ri => resultSlots[ri])
 
     const { error: dbErr } = await supabase.from('games').insert({
@@ -74,22 +67,37 @@ export default function Home() {
           </div>
 
           <div>
-            <label className="block text-sm font-bold mb-1">참여 인원: <span className="text-red-500 text-xl">{n}</span>명</label>
-            <input type="range" min={2} max={10} value={n} onChange={e => handleN(Number(e.target.value))}
+            <label className="block text-sm font-bold mb-1">
+              참여 인원: <span className="text-red-500 text-xl">{n}</span>명
+            </label>
+            <input type="range" min={2} max={50} value={n}
+              onChange={e => setN(Number(e.target.value))}
               className="w-full accent-red-500" />
-            <div className="flex justify-between text-xs text-gray-400 mt-1"><span>2명</span><span>10명</span></div>
+            <div className="flex justify-between text-xs text-gray-400 mt-1"><span>2명</span><span>50명</span></div>
           </div>
 
           <div>
-            <label className="block text-sm font-bold mb-2">당첨 항목 <span className="text-gray-400 font-normal">(빈칸은 꽝)</span></label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-bold">당첨 항목 <span className="text-gray-400 font-normal">(나머지는 꽝)</span></label>
+              <button onClick={addPrize} disabled={prizes.length >= n}
+                className="text-xs text-red-500 font-bold border border-red-300 rounded-lg px-2 py-1 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed">
+                + 추가
+              </button>
+            </div>
+            <div className="space-y-2">
               {prizes.map((p, i) => (
-                <input key={i}
-                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-400"
-                  placeholder={`${i + 1}번 항목`}
-                  value={p}
-                  onChange={e => setPrizes(prev => { const next = [...prev]; next[i] = e.target.value; return next })}
-                />
+                <div key={i} className="flex gap-2">
+                  <input
+                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-400"
+                    placeholder={`당첨 ${i + 1}`}
+                    value={p}
+                    onChange={e => setPrizes(prev => { const next = [...prev]; next[i] = e.target.value; return next })}
+                  />
+                  {prizes.length > 1 && (
+                    <button onClick={() => removePrize(i)}
+                      className="text-gray-300 hover:text-red-400 px-2 text-lg">✕</button>
+                  )}
+                </div>
               ))}
             </div>
           </div>
