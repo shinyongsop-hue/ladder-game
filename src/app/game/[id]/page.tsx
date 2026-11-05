@@ -1,12 +1,12 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, Suspense } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase, Game, Claim } from '@/lib/supabase'
 import { generateLadder, tracePath } from '@/lib/ladder'
 
 type Phase = 'loading' | 'choose' | 'name' | 'animating' | 'result' | 'claimed'
 
-export default function GamePage() {
+function GameContent() {
   const { id } = useParams<{ id: string }>()
   const [game, setGame] = useState<Game | null>(null)
   const [claims, setClaims] = useState<Claim[]>([])
@@ -277,5 +277,13 @@ export default function GamePage() {
         )}
       </div>
     </main>
+  )
+}
+
+export default function GamePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><p className="text-gray-400">불러오는 중...</p></div>}>
+      <GameContent />
+    </Suspense>
   )
 }

@@ -1,9 +1,9 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase, Game, Claim } from '@/lib/supabase'
 
-export default function AdminPage() {
+function AdminContent() {
   const { id } = useParams<{ id: string }>()
   const [game, setGame] = useState<Game | null>(null)
   const [claims, setClaims] = useState<Claim[]>([])
@@ -143,5 +143,13 @@ export default function AdminPage() {
         <p className="text-center text-xs text-gray-400 mt-4">실시간으로 업데이트됩니다</p>
       </div>
     </main>
+  )
+}
+
+export default function AdminPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><p className="text-gray-400">불러오는 중...</p></div>}>
+      <AdminContent />
+    </Suspense>
   )
 }
