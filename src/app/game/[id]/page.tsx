@@ -4,7 +4,24 @@ import { useParams } from 'next/navigation'
 import { supabase, Game, Claim } from '@/lib/supabase'
 import { generateLadder, tracePath } from '@/lib/ladder'
 
-type Phase = 'loading' | 'choose' | 'name' | 'animating' | 'result' | 'claimed'
+type Phase = 'loading' | 'choose' | 'name' | 'animating' | 'result' | 'already'
+
+function storageKey(gameId: string) {
+  return `ladder_claimed_${gameId}`
+}
+
+function getSavedClaim(gameId: string): { slot: number; name: string; result: string } | null {
+  try {
+    const raw = localStorage.getItem(storageKey(gameId))
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+function saveClaim(gameId: string, slot: number, name: string, result: string) {
+  try {
+    localStorage.setItem(storageKey(gameId), JSON.stringify({ slot, name, result }))
+  } catch { /* ignore */ }
+}
 
 function GameContent() {
   const { id } = useParams<{ id: string }>()
@@ -15,14 +32,22 @@ function GameContent() {
   const [myName, setMyName] = useState('')
   const [nameError, setNameError] = useState('')
   const [result, setResult] = useState('')
+  const [savedClaim, setSavedClaim] = useState<{ slot: number; name: string; result: string } | null>(null)
   const [animPath, setAnimPath] = useState<{ row: number; col: number }[]>([])
   const [animStep, setAnimStep] = useState(0)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    loadGame()
-    // Real-time subscription for claims
+    // Check localStorage before loading
+    const existing = getSavedClaim(id)
+    if (existing) {
+      setSavedClaim(existing)
+      setPhase('already')
+      loadGame(false)
+    } else {
+      loadGame(true)
+    }
     const channel = supabase.channel(`claims:${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'claims', filter: `game_id=eq.${id}` },
         () => loadClaims())
@@ -30,9 +55,12 @@ function GameContent() {
     return () => { supabase.removeChannel(channel) }
   }, [id])
 
-  async function loadGame() {
+  async function loadGame(goChoose: boolean) {
     const { data } = await supabase.from('games').select('*').eq('id', id).single()
-    if (data) { setGame(data as Game); setPhase('choose') }
+    if (data) {
+      setGame(data as Game)
+      if (goChoose) setPhase('choose')
+    }
     await loadClaims()
   }
 
@@ -59,7 +87,6 @@ function GameContent() {
   async function handleConfirmName() {
     if (!myName.trim()) { setNameError('이름을 입력해주세요'); return }
     if (!game) return
-    // Try to insert claim (PK prevents duplicates)
     const { error } = await supabase.from('claims').insert({
       game_id: id,
       slot: selectedSlot,
@@ -75,7 +102,6 @@ function GameContent() {
       }
       return
     }
-    // Start animation
     startAnimation()
   }
 
@@ -92,9 +118,11 @@ function GameContent() {
 
   function animateStep(path: { row: number; col: number }[], step: number, rows: number) {
     if (step >= path.length) {
-      // Done
       if (game) {
-        setResult(game.config.results[selectedSlot])
+        const finalResult = game.config.results[selectedSlot]
+        setResult(finalResult)
+        saveClaim(id, selectedSlot, myName.trim(), finalResult)
+        setSavedClaim({ slot: selectedSlot, name: myName.trim(), result: finalResult })
       }
       setPhase('result')
       return
@@ -108,9 +136,7 @@ function GameContent() {
   }, [])
 
   useEffect(() => {
-    if (phase === 'animating' || phase === 'result') {
-      drawLadder()
-    }
+    if (phase === 'animating' || phase === 'result') drawLadder()
   }, [animStep, phase, game])
 
   function drawLadder() {
@@ -119,7 +145,6 @@ function GameContent() {
     const ctx = canvas.getContext('2d')!
     const { n, seed } = game.config
     const { rungs, rows } = generateLadder(n, seed)
-
     const W = canvas.width
     const H = canvas.height
     const pad = 30
@@ -127,34 +152,21 @@ function GameContent() {
     const rowH = (H - pad * 2) / rows
 
     ctx.clearRect(0, 0, W, H)
-
-    // Draw vertical lines
     ctx.strokeStyle = '#d1d5db'
     ctx.lineWidth = 2
     for (let c = 0; c < n; c++) {
       const x = pad + c * colW
-      ctx.beginPath()
-      ctx.moveTo(x, pad)
-      ctx.lineTo(x, H - pad)
-      ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(x, pad); ctx.lineTo(x, H - pad); ctx.stroke()
     }
-
-    // Draw rungs
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < n - 1; c++) {
         if (rungs[r][c]) {
-          const x1 = pad + c * colW
-          const x2 = pad + (c + 1) * colW
+          const x1 = pad + c * colW, x2 = pad + (c + 1) * colW
           const y = pad + (r + 0.5) * rowH
-          ctx.beginPath()
-          ctx.moveTo(x1, y)
-          ctx.lineTo(x2, y)
-          ctx.stroke()
+          ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke()
         }
       }
     }
-
-    // Draw animated path
     if (animPath.length > 0) {
       ctx.strokeStyle = '#ef4444'
       ctx.lineWidth = 3
@@ -166,8 +178,6 @@ function GameContent() {
         ctx.lineTo(pad + pt.col * colW, pad + (pt.row + 1) * rowH)
       }
       ctx.stroke()
-
-      // Draw dot at current position
       if (animStep < animPath.length) {
         const cur = animPath[Math.min(animStep, animPath.length - 1)]
         ctx.fillStyle = '#ef4444'
@@ -176,8 +186,6 @@ function GameContent() {
         ctx.fill()
       }
     }
-
-    // Column labels (top)
     ctx.fillStyle = '#374151'
     ctx.font = 'bold 13px sans-serif'
     ctx.textAlign = 'center'
@@ -194,6 +202,27 @@ function GameContent() {
     return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-400">게임을 찾을 수 없습니다</p></div>
   }
 
+  // Already participated screen
+  if (phase === 'already' && savedClaim) {
+    const isWon = savedClaim.result !== '꽝'
+    return (
+      <main className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-sm bg-white rounded-2xl shadow-lg p-8 text-center">
+          <div className="text-5xl mb-4">{isWon ? '🎉' : '😢'}</div>
+          <h1 className="text-xl font-black mb-1">{game.title}</h1>
+          <p className="text-gray-400 text-sm mb-6">이미 참여하셨습니다</p>
+          <div className="bg-gray-50 rounded-xl p-4 mb-4">
+            <p className="text-sm text-gray-500">{savedClaim.name}님 · {savedClaim.slot + 1}번 선택</p>
+            <p className={`text-4xl font-black mt-2 ${isWon ? 'text-red-500' : 'text-gray-400'}`}>
+              {savedClaim.result}
+            </p>
+          </div>
+          <p className="text-xs text-gray-300">같은 기기에서는 1번만 참여 가능합니다</p>
+        </div>
+      </main>
+    )
+  }
+
   const { n, autoNames } = game.config
 
   return (
@@ -202,7 +231,6 @@ function GameContent() {
         <h1 className="text-2xl font-black text-center mt-4 mb-1">{game.title}</h1>
         <p className="text-center text-gray-400 text-sm mb-6">번호를 선택해 사다리를 타세요</p>
 
-        {/* Slot selection */}
         {(phase === 'choose' || phase === 'name') && (
           <div className="bg-white rounded-2xl shadow p-6 mb-4">
             <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${n <= 10 ? Math.min(n, 5) : n <= 20 ? 5 : 10}, 1fr)` }}>
@@ -258,7 +286,6 @@ function GameContent() {
           </div>
         )}
 
-        {/* Animation / Result */}
         {(phase === 'animating' || phase === 'result') && (
           <div className="bg-white rounded-2xl shadow p-4">
             <canvas
@@ -274,8 +301,7 @@ function GameContent() {
                 <p className={`text-4xl font-black mt-2 ${result === '꽝' ? 'text-gray-400' : 'text-red-500'}`}>
                   {result}
                 </p>
-                <button onClick={() => { setPhase('choose'); setSelectedSlot(-1) }}
-                  className="mt-4 text-gray-400 text-sm underline">돌아가기</button>
+                <p className="text-xs text-gray-300 mt-3">같은 기기에서는 1번만 참여 가능합니다</p>
               </div>
             )}
           </div>
