@@ -3,12 +3,16 @@ import { useEffect, useState, Suspense } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase, Game, Claim } from '@/lib/supabase'
 
+type GameWithStatus = Game & { status?: string }
+
 function AdminContent() {
   const { id } = useParams<{ id: string }>()
-  const [game, setGame] = useState<Game | null>(null)
+  const [game, setGame] = useState<GameWithStatus | null>(null)
   const [claims, setClaims] = useState<Claim[]>([])
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
+  const [closing, setClosing] = useState(false)
+  const [confirmClose, setConfirmClose] = useState(false)
 
   useEffect(() => {
     loadAll()
@@ -21,7 +25,7 @@ function AdminContent() {
 
   async function loadAll() {
     const { data } = await supabase.from('games').select('*').eq('id', id).single()
-    if (data) setGame(data as Game)
+    if (data) setGame(data as GameWithStatus)
     await loadClaims()
     setLoading(false)
   }
@@ -43,6 +47,19 @@ function AdminContent() {
     })
   }
 
+  async function closeGame() {
+    setClosing(true)
+    await supabase.from('games').update({ status: 'closed' }).eq('id', id)
+    setGame(prev => prev ? { ...prev, status: 'closed' } : prev)
+    setClosing(false)
+    setConfirmClose(false)
+  }
+
+  async function reopenGame() {
+    await supabase.from('games').update({ status: 'open' }).eq('id', id)
+    setGame(prev => prev ? { ...prev, status: 'open' } : prev)
+  }
+
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-400">불러오는 중...</p></div>
   }
@@ -53,6 +70,7 @@ function AdminContent() {
 
   const { n, autoNames, results } = game.config
   const totalClaimed = claims.length
+  const isClosed = game.status === 'closed'
 
   return (
     <main className="min-h-screen bg-gray-50 p-4">
@@ -60,9 +78,15 @@ function AdminContent() {
         {/* Header */}
         <div className="bg-white rounded-2xl shadow p-6 mb-4">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-black">{game.title}</h1>
-              <p className="text-sm text-gray-400 mt-1">관리자 현황판</p>
+            <div className="flex items-center gap-3">
+              <img src="/caricature.webp" alt="" className="w-12 h-12 rounded-full object-cover border-2 border-red-100 flex-shrink-0" />
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-2xl font-black">{game.title}</h1>
+                  {isClosed && <span className="text-xs bg-gray-200 text-gray-500 rounded-full px-2 py-0.5 font-bold">종료됨</span>}
+                </div>
+                <p className="text-sm text-gray-400 mt-0.5">관리자 현황판</p>
+              </div>
             </div>
             <div className="text-right">
               <div className="text-3xl font-black text-red-500">{totalClaimed}<span className="text-lg font-normal text-gray-400">/{n}</span></div>
@@ -75,8 +99,34 @@ function AdminContent() {
             <div className="bg-red-500 h-2 rounded-full transition-all" style={{ width: `${(totalClaimed / n) * 100}%` }} />
           </div>
 
+          {/* Game close/reopen */}
+          <div className="mt-4">
+            {!isClosed ? (
+              confirmClose ? (
+                <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
+                  <p className="flex-1 text-sm text-red-600 font-bold">정말 게임을 종료할까요? 참여자가 더 이상 참여할 수 없습니다.</p>
+                  <button onClick={closeGame} disabled={closing}
+                    className="bg-red-500 text-white text-sm font-bold px-3 py-1.5 rounded-lg hover:bg-red-600 disabled:opacity-50">
+                    {closing ? '종료 중...' : '종료'}
+                  </button>
+                  <button onClick={() => setConfirmClose(false)} className="text-gray-400 text-sm px-2">취소</button>
+                </div>
+              ) : (
+                <button onClick={() => setConfirmClose(true)}
+                  className="text-sm text-gray-400 border border-gray-200 rounded-lg px-4 py-2 hover:border-red-300 hover:text-red-500 transition">
+                  🔒 게임 종료
+                </button>
+              )
+            ) : (
+              <button onClick={reopenGame}
+                className="text-sm text-gray-400 border border-gray-200 rounded-lg px-4 py-2 hover:border-green-300 hover:text-green-500 transition">
+                🔓 게임 재개
+              </button>
+            )}
+          </div>
+
           {/* Share link */}
-          <div className="mt-4 flex gap-2 items-center">
+          <div className="mt-3 flex gap-2 items-center">
             <div className="flex-1 bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-500 truncate font-mono">
               {typeof window !== 'undefined' ? `${window.location.origin}/game/${id}` : `/game/${id}`}
             </div>
